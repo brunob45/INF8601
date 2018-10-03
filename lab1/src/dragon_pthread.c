@@ -66,6 +66,7 @@ void* dragon_draw_worker(void *data)
 	if(dragon_draw_raw(tile, start, end, info.dragon, info.dragon_width, info.dragon_height, info.limits, info.id) < 0) 
 		printf("begin: %ld, end: %ld\n", start, end);
 	}
+	//printf("tid is %d, interval is %ld to %ld\n", gettid(), start, end);
 
 	pthread_barrier_wait(info.barrier);
 

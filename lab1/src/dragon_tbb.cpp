@@ -76,6 +76,7 @@ class DragonDraw {
 				printf("2begin: %ld, end: %ld\n", range.begin(), range.end());
 			}
 		}
+			//printf("tid is %d, interval is %ld to %ld\n", gettid(), range.begin(), range.end());
 	}
 	
 };
@@ -202,7 +203,7 @@ int dragon_limits_tbb(limits_t *limits, uint64_t size, int nb_thread)
 
 	/* 1. Calculer les limites */
 	task_scheduler_init init(nb_thread);
-	printf("%d\n", nb_thread);
+	//printf("%d\n", nb_thread);
 	parallel_reduce(blocked_range<int>(0,size), lim);
 
 	/* La limite globale est calculée à partir des limites

@@ -19,6 +19,8 @@ extern "C" {
 using namespace std;
 using namespace tbb;
 
+static TidMap* tid = NULL;
+
 class DragonLimits {
 	public:
 	piece_t pieces[NB_TILES];
@@ -26,16 +28,18 @@ class DragonLimits {
 	DragonLimits(){
 		for(int i =0; i< NB_TILES; i++){
 			piece_init(&pieces[i]);
+			pieces[i].orientation = tiles_orientation[i];
 		}
 	}
 
-	DragonLimits(const DragonLimits& father, split){
+	DragonLimits(const DragonLimits& p, split){
 		for(int i =0; i< NB_TILES; i++){
 			piece_init(&pieces[i]);
+			pieces[i].orientation = tiles_orientation[i];
 		}
 	}
 
-	void operator()(const blocked_range<int>& range){
+	void operator()(const blocked_range<int>& range){		
 		for(int i =0; i< NB_TILES; i++){
 			piece_limit(range.begin(), range.end(), &pieces[i]);
 		}
@@ -51,16 +55,26 @@ class DragonLimits {
 
 class DragonDraw {
 	public:
-	struct draw_data* data;
+	struct draw_data& info;
 	int index;
 
-	DragonDraw(struct draw_data* info)
-	: data(info), index (0)
+	DragonDraw(struct draw_data* data)
+	: info(*data), index (0)
 	{}
+	DragonDraw(const DragonDraw& drgL)
+	: info(drgL.info)
+	, index(drgL.index+1)
+	{
+		// L'index est laissé pseudo aléatoire pour donner des couleurs différentes 
+		// Indexation de l'ID
+		index = tid->getIdFromTid(gettid());
+	}
 
 	void operator()(const blocked_range<uint64_t>& range) const{
-		for(int i =0; i< NB_TILES; i++){
-			dragon_draw_raw(i, range.begin(), range.end(), data->dragon, data->dragon_width, data->dragon_height, data->limits, index);
+		for(int tile =0; tile < NB_TILES; tile++){
+			if(dragon_draw_raw(tile, range.begin(), range.end(), info.dragon, info.dragon_width, info.dragon_height, info.limits, index) < 0) {
+				printf("2begin: %ld, end: %ld\n", range.begin(), range.end());
+			}
 		}
 	}
 	
@@ -68,14 +82,17 @@ class DragonDraw {
 
 class DragonRender {
 	public:
-	struct draw_data* data;
+	struct draw_data& info;
 
-	DragonRender(struct draw_data* info)
-	: data(info)
+	DragonRender(struct draw_data* data)
+	: info(*data)
+	{}
+	DragonRender(const DragonRender& drgR)
+	: info(drgR.info)
 	{}
 
 	void operator()(const blocked_range<int>& range) const{
-		scale_dragon(range.begin(), range.end(), data->image, data->image_width, data->image_height, data->dragon, data->dragon_width, data->dragon_height, data->palette);
+		scale_dragon(range.begin(), range.end(), info.image, info.image_width, info.image_height, info.dragon, info.dragon_width, info.dragon_height, info.palette);
 	}
 };
 
@@ -88,6 +105,11 @@ class DragonClear {
 	: value(initValue), canvas(initCanvas)
 	{}
 
+	DragonClear(const DragonClear& drgC)
+	: value(drgC.value)
+	, canvas(drgC.canvas)
+	{} 
+
 	void operator()(const blocked_range<int>& range) const{
 		init_canvas(range.begin(), range.end(), canvas, value);
 	}
@@ -95,6 +117,8 @@ class DragonClear {
 
 int dragon_draw_tbb(char **canvas, struct rgb *image, int width, int height, uint64_t size, int nb_thread)
 {
+	tid = new TidMap(nb_thread);
+
 	//TODO("dragon_draw_tbb");
 	struct draw_data data;
 	limits_t limits;
@@ -114,8 +138,6 @@ int dragon_draw_tbb(char **canvas, struct rgb *image, int width, int height, uin
 	/* 1. Calculer les limites du dragon */
 	dragon_limits_tbb(&limits, size, nb_thread);
 
-	task_scheduler_init init(nb_thread);
-	
 	dragon_width = limits.maximums.x - limits.minimums.x;
 	dragon_height = limits.maximums.y - limits.minimums.y;
 	dragon_surface = dragon_width * dragon_height;
@@ -146,6 +168,8 @@ int dragon_draw_tbb(char **canvas, struct rgb *image, int width, int height, uin
 	data.palette = palette;
 	data.tid = (int *) calloc(nb_thread, sizeof(int));
 
+	task_scheduler_init init(nb_thread);
+
 	/* 2. Initialiser la surface : DragonClear */
 	DragonClear clear(-1, dragon);
 	parallel_for(blocked_range<int>(0,dragon_surface), clear);
@@ -162,7 +186,8 @@ int dragon_draw_tbb(char **canvas, struct rgb *image, int width, int height, uin
 	free_palette(palette);
 	FREE(data.tid);
 	*canvas = dragon;
-	//*canvas = NULL; // TODO: Retourner le dragon calculé
+	tid->dump();
+	delete tid;
 	return 0;
 }
 
@@ -177,6 +202,7 @@ int dragon_limits_tbb(limits_t *limits, uint64_t size, int nb_thread)
 
 	/* 1. Calculer les limites */
 	task_scheduler_init init(nb_thread);
+	printf("%d\n", nb_thread);
 	parallel_reduce(blocked_range<int>(0,size), lim);
 
 	/* La limite globale est calculée à partir des limites

@@ -43,8 +43,9 @@ void* dragon_draw_worker(void *data)
 	int area = info.dragon_width * info.dragon_height;
 
 	/* 1. Initialiser la surface */
-	int canvasStart = info.id*area/(long int)info.nb_thread;
-	int canvasEnd = (info.id+1)*area/(long int)info.nb_thread;
+	int canvasStart = ((uint64_t)info.id)*area/(long int)info.nb_thread;
+	int canvasEnd = ((uint64_t)(info.id+1))*area/(long int)info.nb_thread;
+	
 	init_canvas(canvasStart, canvasEnd, info.dragon, -1);
 
 	pthread_barrier_wait(info.barrier);
@@ -63,7 +64,7 @@ void* dragon_draw_worker(void *data)
 		*/
 	for(int tile = 0; tile < NB_TILES; tile++) {
 	if(dragon_draw_raw(tile, start, end, info.dragon, info.dragon_width, info.dragon_height, info.limits, info.id) < 0) 
-		printf("start %ld, end %ld\n", start, end);
+		printf("begin: %ld, end: %ld\n", start, end);
 	}
 
 	pthread_barrier_wait(info.barrier);
@@ -146,7 +147,6 @@ int dragon_draw_pthread(char **canvas, struct rgb *image, int width, int height,
 	for(int i = 0; i < nb_thread; i++)
 	{
 		data[i] = info;
-		printf("%d, %d\n", i, data[i].nb_thread);
 		data[i].id = i;
 		pthread_create(&threads[i], NULL, dragon_draw_worker, &data[i]);
 	}

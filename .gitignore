@@ -32,3 +32,21 @@
 *.app
 
 *.odt#
+lab1/config.log
+lab1/config.status
+lab1/dragon.ppm
+lab1/dragon (copie).ppm
+lab1/libtool
+lab1/out.pgm
+lab1/vgcore.15418
+lab1/results/dragon_pthread_26.pgm
+lab1/results/dragon_serial_26.pgm
+lab1/results/dragon_tbb_26.pgm
+lab1/results/intervals.txt
+lab1/results/time_dragonizer_draw_serial_26.data
+lab1/results/time_dragonizer_limits_serial_26.data
+lab1/src/dragonizer
+lab1/tests/dragon_check_failed_tbb.ppm
+lab1/tests/test-all.sh.log
+lab1/tests/test-all.sh.trs
+lab1/tests/test-suite.log

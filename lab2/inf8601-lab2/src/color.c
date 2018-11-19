@@ -17,7 +17,7 @@
 const struct rgb white = { .r = 255, .g = 255, .b = 255 };
 const struct rgb black = { .r = 0, .g = 0, .b = 0 };
 
-static volatile struct rgb c;
+//static volatile struct rgb c;
 
 int save_image(char *path, struct rgb *image, int width, int height)
 {
@@ -86,7 +86,7 @@ void value_color(struct rgb *color, float value, int interval, float interval_in
         *color = black;
         return;
     }
-    //struct rgb c;
+    struct rgb c;
     int x = (((int)value % interval) * 255) * interval_inv;
     int i = value * interval_inv;
     switch(i) {

@@ -59,11 +59,7 @@ int get_opencl_queue()
         ret = clGetPlatformInfo(platform_ids[i], CL_PLATFORM_NAME, BUF_SIZE, name, NULL);
         ERR_THROW(CL_SUCCESS, ret, "failed to get plateform info");
         cout << vendor << " " << name << "\n";
-        ret = clGetDeviceIDs(platform_ids[0], CL_DEVICE_TYPE_GPU, 1, &device, &num_dev);
-        if (CL_SUCCESS == ret) {
-            break;
-        }
-        ret = clGetDeviceIDs(platform_ids[0], CL_DEVICE_TYPE_CPU, 1, &device, &num_dev);
+        ret = clGetDeviceIDs(platform_ids[i], CL_DEVICE_TYPE_GPU, 1, &device, &num_dev);
         if (CL_SUCCESS == ret) {
             break;
         }
@@ -134,8 +130,14 @@ int create_buffer(int width, int height)
     /*
      * TODO: initialiser la memoire requise avec clCreateBuffer()
      */
+    
     cl_int ret = 0;
-    goto error;
+    cl_mem_flags flags = CL_MEM_WRITE_ONLY;
+
+    output = clCreateBuffer(context, flags, width * height * sizeof(struct rgb), NULL, &ret);
+    ERR_THROW(CL_SUCCESS, ret, "clCreateBuffer error!");
+
+    
 done:
     return ret;
 error:
@@ -183,6 +185,7 @@ void opencl_shutdown()
     /*
      * TODO: liberer les ressources allouees
      */
+    if (output) clReleaseMemObject(output);
 }
 
 int sinoscope_image_opencl(sinoscope_t *ptr)
@@ -211,7 +214,35 @@ int sinoscope_image_opencl(sinoscope_t *ptr)
     cl_event ev;
 
     if (ptr == NULL)
-        goto error;
+        return -1;
+
+    sinoscope_t sino = *ptr;
+    size_t worksize[2] = {(size_t)sino.width, (size_t)sino.height};
+
+    // 1.
+    ret |= clSetKernelArg(kernel, 0, sizeof(output), &output);
+    ret |= clSetKernelArg(kernel, 1, sizeof(int), &sino.width);
+    ret |= clSetKernelArg(kernel, 2, sizeof(int), &sino.interval);
+    ret |= clSetKernelArg(kernel, 3, sizeof(int), &sino.taylor);
+    ret |= clSetKernelArg(kernel, 4, sizeof(float), &sino.interval_inv);
+    ret |= clSetKernelArg(kernel, 5, sizeof(float), &sino.time);
+    ret |= clSetKernelArg(kernel, 6, sizeof(float), &sino.phase0);
+    ret |= clSetKernelArg(kernel, 7, sizeof(float), &sino.phase1);
+    ret |= clSetKernelArg(kernel, 8, sizeof(float), &sino.dx);
+    ret |= clSetKernelArg(kernel, 9, sizeof(float), &sino.dy);
+    ERR_THROW(CL_SUCCESS, ret, "clSetKernelArg error!");
+
+    // 2.
+    ret = clEnqueueNDRangeKernel(queue, kernel, 2, NULL, worksize, NULL, 0, NULL, NULL);
+    ERR_THROW(CL_SUCCESS, ret, "clEnqueueNDRangeKernel error!");
+
+    // 3.
+    ret = clFinish(queue);
+    ERR_THROW(CL_SUCCESS, ret, "clFinish error!");
+
+    // 4.
+    ret = clEnqueueReadBuffer(queue, output, CL_TRUE, 0, sino.buf_size, sino.buf, 0, NULL, NULL);
+    ERR_THROW(CL_SUCCESS, ret, "clEnqueueReadBuffer error!");
 
 done:
     return ret;

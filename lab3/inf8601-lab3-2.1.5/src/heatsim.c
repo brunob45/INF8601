@@ -388,7 +388,7 @@ int gather_result(ctx_t *ctx, opts_t *opts)
         {
             MPI_Cart_coords(ctx->comm2d, rank, DIM_2D, coords);
             local_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
-            MPI_Irecv(local_grid->dbl, local_grid->height * local_grid->width, MPI_DOUBLE, rank, 3, ctx->comm2d, &req[rank - 1]);
+            MPI_Irecv(local_grid->dbl, local_grid->height * local_grid->width, MPI_DOUBLE, rank, 3, ctx->comm2d, req + rank - 1]);
         }
         MPI_Waitall(ctx->numprocs - 1, req, status);
     }

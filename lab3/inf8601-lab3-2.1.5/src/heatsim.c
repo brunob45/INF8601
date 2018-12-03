@@ -197,6 +197,7 @@ void free_ctx(ctx_t *ctx) {
 
 int init_ctx(ctx_t *ctx, opts_t *opts) {
     //TODO("lab3");
+    printf("on fait init_ctx\n");
     MPI_Comm_size(MPI_COMM_WORLD, &ctx->numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &ctx->rank);
 
@@ -217,8 +218,8 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
 
     /* TODO: Créer un "2D cartesian communicator" */
     MPI_Cart_create(MPI_COMM_WORLD, DIM_2D, ctx->dims, ctx->isperiodic, ctx->reorder, &ctx->comm2d);
-    MPI_Cart_shift(ctx->comm2d, 0, 1, &ctx->north_peer, &ctx->south_peer);
-    MPI_Cart_shift(ctx->comm2d, 1, 1, &ctx->west_peer, &ctx->east_peer);
+    MPI_Cart_shift(ctx->comm2d, 1, 1, &ctx->north_peer, &ctx->south_peer);
+    MPI_Cart_shift(ctx->comm2d, 0, 1, &ctx->west_peer, &ctx->east_peer);
 	MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, ctx->coords);
 
 
@@ -248,11 +249,12 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
         * TODO: Envoyer les dimensions de la grid dimensions et les données
         * Comment traiter le cas de rank=0 ?
         */
-        for(int i = 1; i < ctx->numprocs; i++) {
+        int i =1;
+        int coord[DIM_2D];
+        for(i = 1; i < ctx->numprocs; i++) {
             MPI_Request req[4];
             MPI_Status status[4];
 
-            int coord[DIM_2D];
             MPI_Cart_coords(ctx->comm2d, i, DIM_2D, coord);
             grid_t *grid = cart2d_get_grid(ctx->cart, coord[0], coord[1]);
 
@@ -264,7 +266,6 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
             MPI_Waitall(4, req, status);
         }
 
-        int coord[DIM_2D];
         MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, coord);
         new_grid = cart2d_get_grid(ctx->cart, coord[0], coord[1]);
     }
@@ -316,7 +317,8 @@ void dump_ctx(ctx_t *ctx) {
 }
 
 void exchng2d(ctx_t *ctx) {
-    grid_t *grid = ctx->next_grid;
+    printf("exchng2d\n");
+    grid_t *grid = ctx->curr_grid;
     int width = grid->pw;
     int height = grid->ph;
     int *data = grid->data;
@@ -324,33 +326,41 @@ void exchng2d(ctx_t *ctx) {
     MPI_Comm comm = ctx->comm2d;
     MPI_Request req[8];
     MPI_Status status[8];
+    printf("exchng2d init.\n");
 
-    double *offset_recv_south = addr + (height - 1) * width;
-	double *offset_recv_north = addr;
-    double *offset_recv_west = addr;
-    double *offset_recv_east = addr + width - 1;
-	MPI_Irecv(offset_recv_south, width, MPI_DOUBLE, ctx->south_peer, 0, comm, &req[0]);
-	MPI_Irecv(offset_recv_north, width, MPI_DOUBLE, ctx->north_peer, 1, comm, &req[1]);
+    double *offset_recv_south = addr + (height - 1) * width +1;
+	double *offset_recv_north = addr +1 ;
+    double *offset_recv_west = addr + width;
+    double *offset_recv_east = addr + 2*width - 1;
+	MPI_Irecv(offset_recv_south, grid->width, MPI_DOUBLE, ctx->south_peer, 0, comm, &req[0]);
+	MPI_Irecv(offset_recv_north, grid->width, MPI_DOUBLE, ctx->north_peer, 1, comm, &req[1]);
     MPI_Irecv(offset_recv_west, 1, ctx->vector, ctx->west_peer, 2, comm, &req[2]);
 	MPI_Irecv(offset_recv_east, 1, ctx->vector, ctx->east_peer, 3, comm, &req[3]);
+    printf("exchng2d 1.\n");
 
-	double *offset_send_south = addr + (height - 2) * width;
-	double *offset_send_north = addr + width;
-    double *offset_send_west = addr + 1;
-    double *offset_send_east = addr + width - 2;
-	MPI_Isend(offset_send_south, width, MPI_DOUBLE, ctx->south_peer, 1, comm, &req[4]);
-	MPI_Isend(offset_send_north, width, MPI_DOUBLE, ctx->north_peer, 0, comm, &req[5]);
+	double *offset_send_south = addr + (height - 2) * width +1;
+	double *offset_send_north = addr + width +1;
+    double *offset_send_west = addr + 1 + width;
+    double *offset_send_east = addr + 2*width - 2;
+	MPI_Isend(offset_send_south, grid->width, MPI_DOUBLE, ctx->south_peer, 1, comm, &req[4]);
+	MPI_Isend(offset_send_north, grid->width, MPI_DOUBLE, ctx->north_peer, 0, comm, &req[5]);
     MPI_Isend(offset_send_west, 1, ctx->vector, ctx->west_peer, 3, comm, &req[6]);
 	MPI_Isend(offset_send_east, 1, ctx->vector, ctx->east_peer, 2, comm, &req[7]);
+    printf("exchng2d 2.\n");
+    printf(status[1].MPI_ERROR);
+    printf("!\n");
 
     MPI_Waitall(8,req,status);
+
+    printf("exchng2d done.\n");
 }
 
 int gather_result(ctx_t *ctx, opts_t *opts) {
     //TODO("lab3");
-
+    printf("gather_result\n");
     int ret = 0;
     grid_t *local_grid = grid_padding(ctx->next_grid, 0);
+    grid_t *tmp_grid;
     if (local_grid == NULL)
         goto err;
 
@@ -359,26 +369,31 @@ int gather_result(ctx_t *ctx, opts_t *opts) {
      * Utiliser grid pour ceci.
      */
 
+    int coords[2];
     if(ctx->rank == 0){
+        printf("gather_result=0\n");
         MPI_Request req[ctx->numprocs - 1];
         MPI_Status status[ctx->numprocs - 1];
-
-        for(int i = 1; i < ctx->numprocs; i++){
-            int childCoords[2];
-            MPI_Cart_coords(ctx->comm2d, i, DIM_2D, childCoords);
-            ctx->next_grid = cart2d_get_grid(ctx->cart, childCoords[0], childCoords[1]);
-            MPI_Irecv(ctx->next_grid->dbl, ctx->next_grid->height*ctx->next_grid->width, MPI_DOUBLE, i, DIM_2D, ctx->comm2d, &req[i]);
+        int i;
+        for( i = 1; i < ctx->numprocs; i++){
+            MPI_Cart_coords(ctx->comm2d, i, DIM_2D, coords);
+            tmp_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
+            MPI_Irecv(tmp_grid->dbl, tmp_grid->height*tmp_grid->width, MPI_DOUBLE, i, DIM_2D, ctx->comm2d, &req[i]);
         }
 
         MPI_Waitall(ctx->numprocs - 1,req,status);
-        free(req);
-        free(status);
-        int mainCoords[DIM_2D];
-        MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, mainCoords);
-        ctx->next_grid = cart2d_get_grid(ctx->cart, mainCoords[0], mainCoords[1]);
+        // free(req);
+        // free(status);
+        MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, coords);
+        tmp_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
+        /* now we can merge all data blocks, reuse global_grid */
+        cart2d_grid_merge(ctx->cart, ctx->global_grid);
+        grid_copy(tmp_grid, local_grid);
+        free_grid(tmp_grid);
     }
     else
     {
+        printf("gather_result!=0\n");
         MPI_Request req;
         MPI_Status status;
         MPI_Isend(local_grid->dbl, local_grid->height*local_grid->width, MPI_DOUBLE, 0, DIM_2D, ctx->comm2d, &req);
@@ -386,10 +401,9 @@ int gather_result(ctx_t *ctx, opts_t *opts) {
     }
 
 
-    /* now we can merge all data blocks, reuse global_grid */
-    cart2d_grid_merge(ctx->cart, ctx->global_grid);
+
     /* temporairement copie de next_grid */
-    grid_copy(ctx->next_grid, ctx->global_grid);
+    //grid_copy(ctx->next_grid, ctx->global_grid);
 
     done: free_grid(local_grid);
     return ret;

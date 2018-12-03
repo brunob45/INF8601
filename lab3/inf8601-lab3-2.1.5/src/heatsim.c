@@ -319,40 +319,38 @@ void dump_ctx(ctx_t *ctx) {
 void exchng2d(ctx_t *ctx) {
     printf("exchng2d\n");
     grid_t *grid = ctx->curr_grid;
-    int width = grid->pw;
-    int height = grid->ph;
-    int *data = grid->data;
-    double *addr = grid->dbl;
+	int width = grid->width;
+	int pw = grid->pw;
+	int ph = grid->ph;
+	int padding = grid->padding;
+
+	double *sendNorthbuffer = grid->dbl + pw * padding + padding;
+	double *receiveNorthBuffer = sendNorthbuffer - pw;
+	
+	double *sendEastBuffer = sendNorthbuffer + width - 1;
+	double *receiveEastBuffer = sendEastBuffer + 1;
+	
+	double *sendSouthBuffer = grid->dbl + (ph - padding - 1) * pw + padding;
+	double *receiveSouthBuffer = sendSouthBuffer + pw;
+		
+	double *sendWestBuffer = sendNorthbuffer;
+	double *receiveWestBuffer = sendWestBuffer - 1;
+
     MPI_Comm comm = ctx->comm2d;
     MPI_Request req[8];
     MPI_Status status[8];
-    printf("exchng2d init.\n");
 
-    double *offset_recv_south = addr + (height - 1) * width +1;
-	double *offset_recv_north = addr +1 ;
-    double *offset_recv_west = addr + width;
-    double *offset_recv_east = addr + 2*width - 1;
-	MPI_Irecv(offset_recv_south, grid->width, MPI_DOUBLE, ctx->south_peer, 0, comm, &req[0]);
-	MPI_Irecv(offset_recv_north, grid->width, MPI_DOUBLE, ctx->north_peer, 1, comm, &req[1]);
-    MPI_Irecv(offset_recv_west, 1, ctx->vector, ctx->west_peer, 2, comm, &req[2]);
-	MPI_Irecv(offset_recv_east, 1, ctx->vector, ctx->east_peer, 3, comm, &req[3]);
-    printf("exchng2d 1.\n");
+	MPI_Irecv(receiveNorthBuffer, width, MPI_DOUBLE, ctx->north_peer, 10, comm, &req[0]);
+	MPI_Irecv(receiveEastBuffer, 1, ctx->vector, ctx->east_peer, 11, comm, &req[1]);
+	MPI_Irecv(receiveSouthBuffer, width, MPI_DOUBLE, ctx->south_peer,12, comm, &req[2]);
+	MPI_Irecv(receiveWestBuffer, 1, ctx->vector, ctx->west_peer, 13, comm, &req[3]);
 
-	double *offset_send_south = addr + (height - 2) * width +1;
-	double *offset_send_north = addr + width +1;
-    double *offset_send_west = addr + 1 + width;
-    double *offset_send_east = addr + 2*width - 2;
-	MPI_Isend(offset_send_south, grid->width, MPI_DOUBLE, ctx->south_peer, 1, comm, &req[4]);
-	MPI_Isend(offset_send_north, grid->width, MPI_DOUBLE, ctx->north_peer, 0, comm, &req[5]);
-    MPI_Isend(offset_send_west, 1, ctx->vector, ctx->west_peer, 3, comm, &req[6]);
-	MPI_Isend(offset_send_east, 1, ctx->vector, ctx->east_peer, 2, comm, &req[7]);
-    printf("exchng2d 2.\n");
-    printf(status[1].MPI_ERROR);
-    printf("!\n");
+  	MPI_Isend(sendNorthbuffer, width, MPI_DOUBLE, ctx->north_peer,12, comm, &req[4]);
+	MPI_Isend(sendEastBuffer, 1, ctx->vector, ctx->east_peer, 13, comm, &req[5]);
+  	MPI_Isend(sendSouthBuffer, width, MPI_DOUBLE, ctx->south_peer,10, comm, &req[6]);
+	MPI_Isend(sendWestBuffer, 1, ctx->vector, ctx->west_peer,	11, comm, &req[7]);
 
-    MPI_Waitall(8,req,status);
-
-    printf("exchng2d done.\n");
+	MPI_Waitall(8, req, status);
 }
 
 int gather_result(ctx_t *ctx, opts_t *opts) {
@@ -397,6 +395,7 @@ int gather_result(ctx_t *ctx, opts_t *opts) {
 	cart2d_grid_merge(ctx->cart, ctx->global_grid);
 	free(req);
 	free(status);
+	done:
     return ret;
     err: ret = -1;
     goto done;

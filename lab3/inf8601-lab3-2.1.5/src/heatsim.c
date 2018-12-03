@@ -368,44 +368,35 @@ int gather_result(ctx_t *ctx, opts_t *opts) {
      * TODO: Transférer les résultats de la simulation vers le rank=0.
      * Utiliser grid pour ceci.
      */
-
-    int coords[2];
-    if(ctx->rank == 0){
-        printf("gather_result=0\n");
-        MPI_Request req[ctx->numprocs - 1];
-        MPI_Status status[ctx->numprocs - 1];
-        int i;
-        for( i = 1; i < ctx->numprocs; i++){
-            MPI_Cart_coords(ctx->comm2d, i, DIM_2D, coords);
-            tmp_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
-            MPI_Irecv(tmp_grid->dbl, tmp_grid->height*tmp_grid->width, MPI_DOUBLE, i, DIM_2D, ctx->comm2d, &req[i]);
+	MPI_Request *req = malloc(ctx->numprocs*sizeof(MPI_Request));
+	MPI_Status *status = malloc(ctx->numprocs*sizeof(MPI_Status));
+	if(ctx->rank == 0)
+	{
+		int coords[DIM_2D];
+		MPI_Cart_coords(ctx->comm2d, 0, DIM_2D, coords);
+		grid_t *allo_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
+		grid_copy(local_grid, allo_grid);
+		int rank;
+		for(rank = 1; rank < ctx->numprocs; rank++)
+		{
+			MPI_Cart_coords(ctx->comm2d, rank, DIM_2D, coords);
+			local_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
+			MPI_Irecv(local_grid->dbl, local_grid->height * local_grid->width, MPI_DOUBLE, rank, 3, ctx->comm2d, &req[rank - 1]);
         }
-
-        MPI_Waitall(ctx->numprocs - 1,req,status);
-        // free(req);
-        // free(status);
-        MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, coords);
-        tmp_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
-        /* now we can merge all data blocks, reuse global_grid */
-        cart2d_grid_merge(ctx->cart, ctx->global_grid);
-        grid_copy(tmp_grid, local_grid);
-        free_grid(tmp_grid);
+		MPI_Waitall(ctx->numprocs-1, req, status);
     }
     else
     {
-        printf("gather_result!=0\n");
-        MPI_Request req;
-        MPI_Status status;
-        MPI_Isend(local_grid->dbl, local_grid->height*local_grid->width, MPI_DOUBLE, 0, DIM_2D, ctx->comm2d, &req);
-        MPI_Waitall(1,&req,&status);
+		MPI_Isend(local_grid->dbl, local_grid->height * local_grid->width, MPI_DOUBLE, 0, 3, ctx->comm2d, req);
+		MPI_Waitall(1, req, status);
     }
 
 
 
     /* temporairement copie de next_grid */
-    //grid_copy(ctx->next_grid, ctx->global_grid);
-
-    done: free_grid(local_grid);
+	cart2d_grid_merge(ctx->cart, ctx->global_grid);
+	free(req);
+	free(status);
     return ret;
     err: ret = -1;
     goto done;

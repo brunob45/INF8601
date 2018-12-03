@@ -244,8 +244,8 @@ int init_ctx(ctx_t *ctx, opts_t *opts)
      * TODO: Le processus rank=0 charge l'image du disque
      * et transfert chaque section aux autres processus
      */
-    MPI_Request *req = malloc(4 * ctx->numprocs * sizeof(MPI_Request));
-    MPI_Status *status = malloc(4 * ctx->numprocs * sizeof(MPI_Status));
+    MPI_Request req[4 * ctx->numprocs];
+    MPI_Status status[4 * ctx->numprocs];
     if (ctx->rank == 0)
     {
         /* Charger l'image d'entrée */
@@ -388,7 +388,7 @@ int gather_result(ctx_t *ctx, opts_t *opts)
         {
             MPI_Cart_coords(ctx->comm2d, rank, DIM_2D, coords);
             local_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
-            MPI_Irecv(local_grid->dbl, local_grid->height * local_grid->width, MPI_DOUBLE, rank, 3, ctx->comm2d, &req[rank - 1]);
+            MPI_Irecv(local_grid->dbl, local_grid->height * local_grid->width, MPI_DOUBLE, rank, 3, ctx->comm2d, req + rank - 1]);
         }
         MPI_Waitall(ctx->numprocs - 1, req, status);
     }

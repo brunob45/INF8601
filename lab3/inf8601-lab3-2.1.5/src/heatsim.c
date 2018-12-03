@@ -227,6 +227,8 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
      * TODO: Le processus rank=0 charge l'image du disque
      * et transfert chaque section aux autres processus
      */
+	MPI_Request *req = malloc(4*ctx->numprocs*sizeof(MPI_Request));
+	MPI_Status *status = malloc(4*ctx->numprocs*sizeof(MPI_Status));
     if(ctx->rank == 0)
     {
         /* Charger l'image d'entrée */
@@ -249,25 +251,21 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
         * TODO: Envoyer les dimensions de la grid dimensions et les données
         * Comment traiter le cas de rank=0 ?
         */
-        int i =1;
-        int coord[DIM_2D];
-        for(i = 1; i < ctx->numprocs; i++) {
-            MPI_Request req[4];
-            MPI_Status status[4];
+		int rank;
+		int coords[DIM_2D];
+		for(rank = 1; rank < ctx->numprocs; ++rank)
+		{
+			MPI_Cart_coords(ctx->comm2d, rank, DIM_2D, coords);	
+			grid_t *g = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
 
-            MPI_Cart_coords(ctx->comm2d, i, DIM_2D, coord);
-            grid_t *grid = cart2d_get_grid(ctx->cart, coord[0], coord[1]);
-
-            MPI_Isend(&grid->width, 1, MPI_INTEGER, i, 0, ctx->comm2d, &req[0]);
-            MPI_Isend(&grid->height, 1, MPI_INTEGER, i, 1, ctx->comm2d, &req[1]);
-            MPI_Isend(&grid->padding, 1, MPI_INTEGER, i, 2, ctx->comm2d, &req[2]);
-            MPI_Isend(grid->dbl, grid->pw*grid->ph, MPI_DOUBLE, i, 3, ctx->comm2d, &req[3]);
-
-            MPI_Waitall(4, req, status);
+			MPI_Isend(&g->width, 1, MPI_INTEGER, rank, rank * 4 + 0, ctx->comm2d, &req[(rank-1)*4+0]);
+			MPI_Isend(&g->height, 1, MPI_INTEGER, rank, rank * 4 + 1, ctx->comm2d, &req[(rank-1)*4+1]);
+			MPI_Isend(&g->padding, 1, MPI_INTEGER, rank, rank * 4 + 2, ctx->comm2d, &req[(rank-1)*4+2]);
+			MPI_Isend(g->dbl, g->pw * g->ph, MPI_DOUBLE, rank, rank * 4 + 3, ctx->comm2d, &req[(rank-1)*4+3]);
         }
-
-        MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, coord);
-        new_grid = cart2d_get_grid(ctx->cart, coord[0], coord[1]);
+		MPI_Waitall(4 * (ctx->numprocs - 1), req, status);
+		MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, coords);
+		new_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
     }
     else
     {
@@ -275,20 +273,14 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
         * TODO: Recevoir les dimensions de la grid
         * et stocker dans new_grid
         */
-        MPI_Request req[4];
-        MPI_Status status[4];
-
         int width, height, padding;
-
-        MPI_Irecv(&width, 1, MPI_INTEGER, 0, 0, ctx->comm2d, &req[0]);
-        MPI_Irecv(&height, 1, MPI_INTEGER, 0, 1, ctx->comm2d, &req[1]);
-        MPI_Irecv(&padding, 1, MPI_INTEGER, 0, 2, ctx->comm2d, &req[2]);
+		MPI_Irecv(&width, 1, MPI_INTEGER, 0, ctx->rank * 4 + 0, ctx->comm2d, &req[0]);
+		MPI_Irecv(&height, 1, MPI_INTEGER, 0, ctx->rank * 4 + 1, ctx->comm2d, &req[1]);
+		MPI_Irecv(&padding, 1, MPI_INTEGER, 0, ctx->rank * 4 + 2, ctx->comm2d, &req[2]);
         MPI_Waitall(3, req, status);
-
         new_grid = make_grid(width, height, padding);
-
-        MPI_Irecv(&new_grid->dbl, new_grid->pw*new_grid->ph, MPI_DOUBLE, 0, 3, ctx->comm2d, &req[3]);
-        MPI_Waitall(1, &req[3], &status[3]);
+		MPI_Irecv(new_grid->dbl, new_grid->pw*new_grid->ph, MPI_DOUBLE, 0, ctx->rank * 4 + 3, ctx->comm2d, &req[0]);
+		MPI_Waitall(1, req, status);
     }
 
     if (new_grid == NULL)
@@ -358,10 +350,8 @@ int gather_result(ctx_t *ctx, opts_t *opts) {
     printf("gather_result\n");
     int ret = 0;
     grid_t *local_grid = grid_padding(ctx->next_grid, 0);
-    grid_t *tmp_grid;
     if (local_grid == NULL)
         goto err;
-
     /*
      * TODO: Transférer les résultats de la simulation vers le rank=0.
      * Utiliser grid pour ceci.

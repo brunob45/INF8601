@@ -196,8 +196,6 @@ void free_ctx(ctx_t *ctx) {
 }
 
 int init_ctx(ctx_t *ctx, opts_t *opts) {
-    //TODO("lab3");
-    printf("on fait init_ctx\n");
     MPI_Comm_size(MPI_COMM_WORLD, &ctx->numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &ctx->rank);
 
@@ -309,7 +307,6 @@ void dump_ctx(ctx_t *ctx) {
 }
 
 void exchng2d(ctx_t *ctx) {
-    printf("exchng2d\n");
     grid_t *grid = ctx->curr_grid;
 	int width = grid->width;
 	int pw = grid->pw;
@@ -346,8 +343,6 @@ void exchng2d(ctx_t *ctx) {
 }
 
 int gather_result(ctx_t *ctx, opts_t *opts) {
-    //TODO("lab3");
-    printf("gather_result\n");
     int ret = 0;
     grid_t *local_grid = grid_padding(ctx->next_grid, 0);
     if (local_grid == NULL)

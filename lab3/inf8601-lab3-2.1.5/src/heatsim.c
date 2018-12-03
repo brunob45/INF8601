@@ -276,7 +276,7 @@ int init_ctx(ctx_t *ctx, opts_t *opts)
             grid_t *g = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
 
             MPI_Request* req_tmp = req + (rank-1)*4;
-            MPI_Isend(&g->width, 1, MPI_INTEGER, rank, rank * 4 + 0, ctx->comm2d, req_tmp + 0;
+            MPI_Isend(&g->width, 1, MPI_INTEGER, rank, rank * 4 + 0, ctx->comm2d, req_tmp + 0);
             MPI_Isend(&g->height, 1, MPI_INTEGER, rank, rank * 4 + 1, ctx->comm2d, req_tmp + 1);
             MPI_Isend(&g->padding, 1, MPI_INTEGER, rank, rank * 4 + 2, ctx->comm2d, req_tmp + 2);
             MPI_Isend(g->dbl, g->pw * g->ph, MPI_DOUBLE, rank, rank * 4 + 3, ctx->comm2d, req_tmp + 3);

@@ -28,11 +28,12 @@
 #define DEFAULT_OUTPUT_PPM "heatsim.png"
 #define DEFAULT_DIMX 1
 #define DEFAULT_DIMY 1
-#define DEFAULT_ITER 110
+#define DEFAULT_ITER 100
 #define MAX_TEMP 1000.0
 #define DIM_2D 2
 
-typedef struct ctx {
+typedef struct ctx
+{
     cart2d_t *cart;
     grid_t *global_grid;
     grid_t *curr_grid;
@@ -54,7 +55,8 @@ typedef struct ctx {
     MPI_Datatype vector;
 } ctx_t;
 
-typedef struct command_opts {
+typedef struct command_opts
+{
     int dimx;
     int dimy;
     int iter;
@@ -65,8 +67,8 @@ typedef struct command_opts {
 
 static opts_t *global_opts = NULL;
 
-__attribute__((noreturn))
-static void usage(void) {
+__attribute__((noreturn)) static void usage(void)
+{
     fprintf(stderr, PROGNAME " " VERSION " " PACKAGE_NAME "\n");
     fprintf(stderr, "Usage: " PROGNAME " [OPTIONS] [COMMAND]\n");
     fprintf(stderr, "\nOptions:\n");
@@ -80,7 +82,8 @@ static void usage(void) {
     exit(EXIT_FAILURE);
 }
 
-static void dump_opts(struct command_opts *opts) {
+static void dump_opts(struct command_opts *opts)
+{
     printf("%10s %s\n", "option", "value");
     printf("%10s %d\n", "dimx", opts->dimx);
     printf("%10s %d\n", "dimy", opts->dimy);
@@ -90,26 +93,35 @@ static void dump_opts(struct command_opts *opts) {
     printf("%10s %d\n", "verbose", opts->verbose);
 }
 
-void default_int_value(int *val, int def) {
+void default_int_value(int *val, int def)
+{
     if (*val == 0)
         *val = def;
 }
 
-static int parse_opts(int argc, char **argv, struct command_opts *opts) {
+static int parse_opts(int argc, char **argv, struct command_opts *opts)
+{
     int idx;
     int opt;
     int ret = 0;
 
-    struct option options[] = { { "help", 0, 0, 'h' },
-            { "iter", 1, 0, 'r' }, { "dimx", 1, 0, 'x' }, { "dimy",
-                    1, 0, 'y' }, { "input", 1, 0, 'i' }, {
-                    "output", 1, 0, 'o' }, { "verbose", 0,
-                    0, 'v' }, { 0, 0, 0, 0 } };
+    struct option options[] = {{"help", 0, 0, 'h'},
+                               {"iter", 1, 0, 'r'},
+                               {"dimx", 1, 0, 'x'},
+                               {"dimy",
+                                1, 0, 'y'},
+                               {"input", 1, 0, 'i'},
+                               {"output", 1, 0, 'o'},
+                               {"verbose", 0,
+                                0, 'v'},
+                               {0, 0, 0, 0}};
 
     memset(opts, 0, sizeof(struct command_opts));
 
-    while ((opt = getopt_long(argc, argv, "hvx:y:l:", options, &idx)) != -1) {
-        switch (opt) {
+    while ((opt = getopt_long(argc, argv, "hvx:y:l:", options, &idx)) != -1)
+    {
+        switch (opt)
+        {
         case 'r':
             opts->iter = atoi(optarg);
             break;
@@ -147,12 +159,14 @@ static int parse_opts(int argc, char **argv, struct command_opts *opts) {
     if (opts->output == NULL)
         if (asprintf(&opts->output, "%s", DEFAULT_OUTPUT_PPM) < 0)
             goto err;
-    if (opts->input == NULL) {
+    if (opts->input == NULL)
+    {
         fprintf(stderr, "missing input file");
         goto err;
     }
 
-    if (opts->dimx == 0 || opts->dimy == 0) {
+    if (opts->dimx == 0 || opts->dimy == 0)
+    {
         fprintf(stderr,
                 "argument error: dimx and dimy must be greater than 0\n");
         ret = -1;
@@ -162,25 +176,28 @@ static int parse_opts(int argc, char **argv, struct command_opts *opts) {
         dump_opts(opts);
     global_opts = opts;
     return ret;
-    err:
+err:
     FREE(opts->input);
     FREE(opts->output);
     return -1;
 }
 
-FILE *open_logfile(int rank) {
+FILE *open_logfile(int rank)
+{
     char str[255];
     sprintf(str, "out-%d", rank);
     FILE *f = fopen(str, "w+");
     return f;
 }
 
-ctx_t *make_ctx() {
-    ctx_t *ctx = (ctx_t *) calloc(1, sizeof(ctx_t));
+ctx_t *make_ctx()
+{
+    ctx_t *ctx = (ctx_t *)calloc(1, sizeof(ctx_t));
     return ctx;
 }
 
-void free_ctx(ctx_t *ctx) {
+void free_ctx(ctx_t *ctx)
+{
     if (ctx == NULL)
         return;
     free_grid(ctx->global_grid);
@@ -188,18 +205,21 @@ void free_ctx(ctx_t *ctx) {
     free_grid(ctx->next_grid);
     free_grid(ctx->heat_grid);
     free_cart2d(ctx->cart);
-    if (ctx->log != NULL) {
+    if (ctx->log != NULL)
+    {
         fflush(ctx->log);
         fclose(ctx->log);
     }
     FREE(ctx);
 }
 
-int init_ctx(ctx_t *ctx, opts_t *opts) {
+int init_ctx(ctx_t *ctx, opts_t *opts)
+{
     MPI_Comm_size(MPI_COMM_WORLD, &ctx->numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &ctx->rank);
 
-    if (opts->dimx * opts->dimy != ctx->numprocs) {
+    if (opts->dimx * opts->dimy != ctx->numprocs)
+    {
         fprintf(stderr,
                 "2D decomposition blocks must equal number of process\n");
         goto err;
@@ -218,16 +238,15 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
     MPI_Cart_create(MPI_COMM_WORLD, DIM_2D, ctx->dims, ctx->isperiodic, ctx->reorder, &ctx->comm2d);
     MPI_Cart_shift(ctx->comm2d, 1, 1, &ctx->north_peer, &ctx->south_peer);
     MPI_Cart_shift(ctx->comm2d, 0, 1, &ctx->west_peer, &ctx->east_peer);
-	MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, ctx->coords);
-
+    MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, ctx->coords);
 
     /*
      * TODO: Le processus rank=0 charge l'image du disque
      * et transfert chaque section aux autres processus
      */
-	MPI_Request *req = malloc(4*ctx->numprocs*sizeof(MPI_Request));
-	MPI_Status *status = malloc(4*ctx->numprocs*sizeof(MPI_Status));
-    if(ctx->rank == 0)
+    MPI_Request *req = malloc(4 * ctx->numprocs * sizeof(MPI_Request));
+    MPI_Status *status = malloc(4 * ctx->numprocs * sizeof(MPI_Status));
+    if (ctx->rank == 0)
     {
         /* Charger l'image d'entrée */
         image_t *image = load_png(opts->input);
@@ -242,28 +261,28 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
 
         /* Décomposition 2D */
         ctx->cart = make_cart2d(ctx->global_grid->width,
-                ctx->global_grid->height, opts->dimx, opts->dimy);
+                                ctx->global_grid->height, opts->dimx, opts->dimy);
         cart2d_grid_split(ctx->cart, ctx->global_grid);
-    
+
         /*
         * TODO: Envoyer les dimensions de la grid dimensions et les données
         * Comment traiter le cas de rank=0 ?
         */
-		int rank;
-		int coords[DIM_2D];
-		for(rank = 1; rank < ctx->numprocs; ++rank)
-		{
-			MPI_Cart_coords(ctx->comm2d, rank, DIM_2D, coords);	
-			grid_t *g = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
+        int rank;
+        int coords[DIM_2D];
+        for (rank = 1; rank < ctx->numprocs; ++rank)
+        {
+            MPI_Cart_coords(ctx->comm2d, rank, DIM_2D, coords);
+            grid_t *g = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
 
-			MPI_Isend(&g->width, 1, MPI_INTEGER, rank, rank * 4 + 0, ctx->comm2d, &req[(rank-1)*4+0]);
-			MPI_Isend(&g->height, 1, MPI_INTEGER, rank, rank * 4 + 1, ctx->comm2d, &req[(rank-1)*4+1]);
-			MPI_Isend(&g->padding, 1, MPI_INTEGER, rank, rank * 4 + 2, ctx->comm2d, &req[(rank-1)*4+2]);
-			MPI_Isend(g->dbl, g->pw * g->ph, MPI_DOUBLE, rank, rank * 4 + 3, ctx->comm2d, &req[(rank-1)*4+3]);
+            MPI_Isend(&g->width, 1, MPI_INTEGER, rank, rank * 4 + 0, ctx->comm2d, &req[(rank - 1) * 4 + 0]);
+            MPI_Isend(&g->height, 1, MPI_INTEGER, rank, rank * 4 + 1, ctx->comm2d, &req[(rank - 1) * 4 + 1]);
+            MPI_Isend(&g->padding, 1, MPI_INTEGER, rank, rank * 4 + 2, ctx->comm2d, &req[(rank - 1) * 4 + 2]);
+            MPI_Isend(g->dbl, g->pw * g->ph, MPI_DOUBLE, rank, rank * 4 + 3, ctx->comm2d, &req[(rank - 1) * 4 + 3]);
         }
-		MPI_Waitall(4 * (ctx->numprocs - 1), req, status);
-		MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, coords);
-		new_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
+        MPI_Waitall(4 * (ctx->numprocs - 1), req, status);
+        MPI_Cart_coords(ctx->comm2d, ctx->rank, DIM_2D, coords);
+        new_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
     }
     else
     {
@@ -272,13 +291,13 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
         * et stocker dans new_grid
         */
         int width, height, padding;
-		MPI_Irecv(&width, 1, MPI_INTEGER, 0, ctx->rank * 4 + 0, ctx->comm2d, &req[0]);
-		MPI_Irecv(&height, 1, MPI_INTEGER, 0, ctx->rank * 4 + 1, ctx->comm2d, &req[1]);
-		MPI_Irecv(&padding, 1, MPI_INTEGER, 0, ctx->rank * 4 + 2, ctx->comm2d, &req[2]);
+        MPI_Irecv(&width, 1, MPI_INTEGER, 0, ctx->rank * 4 + 0, ctx->comm2d, &req[0]);
+        MPI_Irecv(&height, 1, MPI_INTEGER, 0, ctx->rank * 4 + 1, ctx->comm2d, &req[1]);
+        MPI_Irecv(&padding, 1, MPI_INTEGER, 0, ctx->rank * 4 + 2, ctx->comm2d, &req[2]);
         MPI_Waitall(3, req, status);
         new_grid = make_grid(width, height, padding);
-		MPI_Irecv(new_grid->dbl, new_grid->pw*new_grid->ph, MPI_DOUBLE, 0, ctx->rank * 4 + 3, ctx->comm2d, &req[0]);
-		MPI_Waitall(1, req, status);
+        MPI_Irecv(new_grid->dbl, new_grid->pw * new_grid->ph, MPI_DOUBLE, 0, ctx->rank * 4 + 3, ctx->comm2d, &req[0]);
+        MPI_Waitall(1, req, status);
     }
 
     if (new_grid == NULL)
@@ -294,10 +313,12 @@ int init_ctx(ctx_t *ctx, opts_t *opts) {
     MPI_Type_commit(&ctx->vector);
 
     return 0;
-    err: return -1;
+err:
+    return -1;
 }
 
-void dump_ctx(ctx_t *ctx) {
+void dump_ctx(ctx_t *ctx)
+{
     fprintf(ctx->log, "*** CONTEXT ***\n");
     fprintf(ctx->log, "rank=%d\n", ctx->rank);
     fprintf(ctx->log, "north=%d south=%d west=%d east=%d \n",
@@ -306,43 +327,45 @@ void dump_ctx(ctx_t *ctx) {
     fprintf(ctx->log, "***************\n");
 }
 
-void exchng2d(ctx_t *ctx) {
+void exchng2d(ctx_t *ctx)
+{
     grid_t *grid = ctx->curr_grid;
-	int width = grid->width;
-	int pw = grid->pw;
-	int ph = grid->ph;
-	int padding = grid->padding;
+    int width = grid->width;
+    int pw = grid->pw;
+    int ph = grid->ph;
+    int padding = grid->padding;
 
-	double *sendNorthbuffer = grid->dbl + pw * padding + padding;
-	double *receiveNorthBuffer = sendNorthbuffer - pw;
-	
-	double *sendEastBuffer = sendNorthbuffer + width - 1;
-	double *receiveEastBuffer = sendEastBuffer + 1;
-	
-	double *sendSouthBuffer = grid->dbl + (ph - padding - 1) * pw + padding;
-	double *receiveSouthBuffer = sendSouthBuffer + pw;
-		
-	double *sendWestBuffer = sendNorthbuffer;
-	double *receiveWestBuffer = sendWestBuffer - 1;
+    double *sendNorthbuffer = grid->dbl + pw * padding + padding;
+    double *receiveNorthBuffer = sendNorthbuffer - pw;
+
+    double *sendEastBuffer = sendNorthbuffer + width - 1;
+    double *receiveEastBuffer = sendEastBuffer + 1;
+
+    double *sendSouthBuffer = grid->dbl + (ph - padding - 1) * pw + padding;
+    double *receiveSouthBuffer = sendSouthBuffer + pw;
+
+    double *sendWestBuffer = sendNorthbuffer;
+    double *receiveWestBuffer = sendWestBuffer - 1;
 
     MPI_Comm comm = ctx->comm2d;
     MPI_Request req[8];
     MPI_Status status[8];
 
-	MPI_Irecv(receiveNorthBuffer, width, MPI_DOUBLE, ctx->north_peer, 10, comm, &req[0]);
-	MPI_Irecv(receiveEastBuffer, 1, ctx->vector, ctx->east_peer, 11, comm, &req[1]);
-	MPI_Irecv(receiveSouthBuffer, width, MPI_DOUBLE, ctx->south_peer,12, comm, &req[2]);
-	MPI_Irecv(receiveWestBuffer, 1, ctx->vector, ctx->west_peer, 13, comm, &req[3]);
+    MPI_Irecv(receiveNorthBuffer, width, MPI_DOUBLE, ctx->north_peer, 0, comm, &req[0]);
+    MPI_Irecv(receiveEastBuffer, 1, ctx->vector, ctx->east_peer, 1, comm, &req[1]);
+    MPI_Irecv(receiveSouthBuffer, width, MPI_DOUBLE, ctx->south_peer, 2, comm, &req[2]);
+    MPI_Irecv(receiveWestBuffer, 1, ctx->vector, ctx->west_peer, 3, comm, &req[3]);
 
-  	MPI_Isend(sendNorthbuffer, width, MPI_DOUBLE, ctx->north_peer,12, comm, &req[4]);
-	MPI_Isend(sendEastBuffer, 1, ctx->vector, ctx->east_peer, 13, comm, &req[5]);
-  	MPI_Isend(sendSouthBuffer, width, MPI_DOUBLE, ctx->south_peer,10, comm, &req[6]);
-	MPI_Isend(sendWestBuffer, 1, ctx->vector, ctx->west_peer,	11, comm, &req[7]);
+    MPI_Isend(sendNorthbuffer, width, MPI_DOUBLE, ctx->north_peer, 2, comm, &req[4]);
+    MPI_Isend(sendEastBuffer, 1, ctx->vector, ctx->east_peer, 3, comm, &req[5]);
+    MPI_Isend(sendSouthBuffer, width, MPI_DOUBLE, ctx->south_peer, 0, comm, &req[6]);
+    MPI_Isend(sendWestBuffer, 1, ctx->vector, ctx->west_peer, 1, comm, &req[7]);
 
-	MPI_Waitall(8, req, status);
+    MPI_Waitall(8, req, status);
 }
 
-int gather_result(ctx_t *ctx, opts_t *opts) {
+int gather_result(ctx_t *ctx, opts_t *opts)
+{
     int ret = 0;
     grid_t *local_grid = grid_padding(ctx->next_grid, 0);
     if (local_grid == NULL)
@@ -351,47 +374,48 @@ int gather_result(ctx_t *ctx, opts_t *opts) {
      * TODO: Transférer les résultats de la simulation vers le rank=0.
      * Utiliser grid pour ceci.
      */
-	MPI_Request *req = malloc(ctx->numprocs*sizeof(MPI_Request));
-	MPI_Status *status = malloc(ctx->numprocs*sizeof(MPI_Status));
-	if(ctx->rank == 0)
-	{
-		int coords[DIM_2D];
-		MPI_Cart_coords(ctx->comm2d, 0, DIM_2D, coords);
-		grid_t *allo_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
-		grid_copy(local_grid, allo_grid);
-		int rank;
-		for(rank = 1; rank < ctx->numprocs; rank++)
-		{
-			MPI_Cart_coords(ctx->comm2d, rank, DIM_2D, coords);
-			local_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
-			MPI_Irecv(local_grid->dbl, local_grid->height * local_grid->width, MPI_DOUBLE, rank, 3, ctx->comm2d, &req[rank - 1]);
+    MPI_Request *req = malloc(ctx->numprocs * sizeof(MPI_Request));
+    MPI_Status *status = malloc(ctx->numprocs * sizeof(MPI_Status));
+    if (ctx->rank == 0)
+    {
+        int coords[DIM_2D];
+        MPI_Cart_coords(ctx->comm2d, 0, DIM_2D, coords);
+        grid_t *allo_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
+        grid_copy(local_grid, allo_grid);
+        int rank;
+        for (rank = 1; rank < ctx->numprocs; rank++)
+        {
+            MPI_Cart_coords(ctx->comm2d, rank, DIM_2D, coords);
+            local_grid = cart2d_get_grid(ctx->cart, coords[0], coords[1]);
+            MPI_Irecv(local_grid->dbl, local_grid->height * local_grid->width, MPI_DOUBLE, rank, 3, ctx->comm2d, &req[rank - 1]);
         }
-		MPI_Waitall(ctx->numprocs-1, req, status);
+        MPI_Waitall(ctx->numprocs - 1, req, status);
     }
     else
     {
-		MPI_Isend(local_grid->dbl, local_grid->height * local_grid->width, MPI_DOUBLE, 0, 3, ctx->comm2d, req);
-		MPI_Waitall(1, req, status);
+        MPI_Isend(local_grid->dbl, local_grid->height * local_grid->width, MPI_DOUBLE, 0, 3, ctx->comm2d, req);
+        MPI_Waitall(1, req, status);
     }
 
-
-
     /* temporairement copie de next_grid */
-	cart2d_grid_merge(ctx->cart, ctx->global_grid);
-	free(req);
-	free(status);
-	done:
+    cart2d_grid_merge(ctx->cart, ctx->global_grid);
+    free(req);
+    free(status);
+done:
     return ret;
-    err: ret = -1;
+err:
+    ret = -1;
     goto done;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     ctx_t *ctx = NULL;
     int rep, ret;
     opts_t opts;
 
-    if (parse_opts(argc, argv, &opts) < 0) {
+    if (parse_opts(argc, argv, &opts) < 0)
+    {
         printf("Error while parsing arguments\n");
         usage();
     }
@@ -406,32 +430,38 @@ int main(int argc, char **argv) {
     if (opts.verbose)
         dump_ctx(ctx);
 
-    if (ctx->verbose) {
+    if (ctx->verbose)
+    {
         fprintf(ctx->log, "heat grid\n");
         fdump_grid(ctx->heat_grid, ctx->log);
     }
 
-    for (rep = 0; rep < opts.iter; rep++) {
-        if (ctx->verbose) {
+    for (rep = 0; rep < opts.iter; rep++)
+    {
+        if (ctx->verbose)
+        {
             fprintf(ctx->log, "iter %d\n", rep);
             fprintf(ctx->log, "start\n");
             fdump_grid(ctx->curr_grid, ctx->log);
         }
 
         grid_set_min(ctx->heat_grid, ctx->curr_grid);
-        if (ctx->verbose) {
+        if (ctx->verbose)
+        {
             fprintf(ctx->log, "grid_set_min\n");
             fdump_grid(ctx->curr_grid, ctx->log);
         }
 
         exchng2d(ctx);
-        if (ctx->verbose) {
+        if (ctx->verbose)
+        {
             fprintf(ctx->log, "exchng2d\n");
             fdump_grid(ctx->curr_grid, ctx->log);
         }
 
         heat_diffuse(ctx->curr_grid, ctx->next_grid);
-        if (ctx->verbose) {
+        if (ctx->verbose)
+        {
             fprintf(ctx->log, "heat_diffuse\n");
             fdump_grid(ctx->next_grid, ctx->log);
         }
@@ -442,9 +472,11 @@ int main(int argc, char **argv) {
     if (gather_result(ctx, &opts) < 0)
         goto err;
 
-    if (ctx->rank == 0) {
+    if (ctx->rank == 0)
+    {
         printf("saving...\n");
-        if (save_grid_png(ctx->global_grid, opts.output) < 0) {
+        if (save_grid_png(ctx->global_grid, opts.output) < 0)
+        {
             printf("saving failed\n");
             goto err;
         }
@@ -463,4 +495,3 @@ err:
     ret = EXIT_FAILURE;
     goto done;
 }
-
